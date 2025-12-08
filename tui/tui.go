@@ -2,79 +2,70 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	miniflux "miniflux.app/v2/client"
 )
 
-type responseMsg struct{}
+type MFResult struct {
+	Entries []*miniflux.Entry
+	Error   error
+}
 
-func listenForActivity(sub chan struct{}) tea.Cmd {
+func (m model) refreshFeed() tea.Cmd {
 	return func() tea.Msg {
-		for {
-			time.Sleep(time.Millisecond * time.Duration(rand.Int63n(900)+100))
-			sub <- struct{}{}
+		result, err := m.client.Entries(&miniflux.Filter{
+			Statuses:  []string{"unread"},
+			Order:     "published_at",
+			Limit:     5,
+			Direction: "desc",
+		})
+
+		return MFResult{
+			Entries: result.Entries,
+			Error:   err,
 		}
 	}
 }
 
-func waitForActivity(feed chan MFResult) tea.Cmd {
-	return func() tea.Msg {
-		return <-feed
-	}
-}
-
 type model struct {
-	entries   []string
-	cursor    int
-	selected  map[int]struct{}
-	feed      chan MFResult
-	responses int
-	spinner   spinner.Model
-	done      chan bool
-	quitting  bool
+	client     *miniflux.Client
+	lastUpdate time.Time
+	entries    []string
+	cursor     int
+	selected   map[int]struct{}
+	quitting   bool
 }
 
-func InitialModel(feed chan MFResult, done chan bool) model {
+func InitialModel(client *miniflux.Client) model {
 	return model{
-		feed:     feed,
-		done:     done,
+		client:   client,
 		entries:  make([]string, 0),
 		selected: make(map[int]struct{}),
-		spinner:  spinner.New(),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		waitForActivity(m.feed),
-	)
+	return m.refreshFeed()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case responseMsg:
-		m.responses++
-		return m, waitForActivity(m.feed)
 	case MFResult:
 		entries := make([]string, 0)
 		for _, entry := range msg.Entries {
 			entries = append(entries, entry.Title)
 		}
 		m.entries = entries
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		m.lastUpdate = time.Now()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			m.done <- true
 			m.quitting = true
 			return m, tea.Quit
+		case "r":
+			return m, m.refreshFeed()
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -97,22 +88,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := fmt.Sprintf("\n %s Events received: %d\n\n", m.spinner.View(), m.responses)
-	if m.quitting {
-		s += "\n"
-	}
+	s := fmt.Sprintf("\n Entries. (Last updated on %s)\n\n", m.lastUpdate.Format("15:04:05"))
 	for i, choice := range m.entries {
 		cursor := " "
 		if m.cursor == i {
 			cursor = ">"
 		}
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+		s += fmt.Sprintf("%s %s\n", cursor, choice)
 	}
-	s += "\nPress q to quit.\n"
+	s += "\nPress r to refresh, q to quit.\n"
 
 	return s
 }
