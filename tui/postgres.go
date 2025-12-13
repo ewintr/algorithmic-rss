@@ -28,7 +28,9 @@ var migrations = []string{
   	id INTEGER PRIMARY KEY,
   	feed_id INTEGER references feed(id),
   	updated TIMESTAMP,
+  	rating rating,
   	title TEXT,
+  	url TEXT,
   	content TEXT
 	)`,
 }
@@ -141,6 +143,19 @@ func (p *Postgres) Feeds() ([]Feed, error) {
 	}
 
 	return result, nil
+}
+
+func (p *Postgres) StoreEntry(entry Entry, rating string) error {
+	if _, err := p.db.Exec(`INSERT INTO entry
+(id, feed_id, updated, title, rating, url, content)
+VALUES ($1, $2, NOW(), $3, $4, $5, $6)`,
+		entry.ID, entry.FeedID, entry.Title,
+		rating, entry.URL, entry.Content,
+	); err != nil {
+		return fmt.Errorf("%w: %v", ErrPostgresFailure, err)
+	}
+
+	return nil
 }
 
 func (p *Postgres) migrate(wanted []string) error {

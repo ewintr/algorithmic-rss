@@ -139,6 +139,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := m.rateEntry(msg.String()); err != nil {
 				m.status = fmt.Sprintf("Error: %s", err)
 			}
+			m.entries = append(m.entries[:m.cursor], m.entries[m.cursor+1:]...)
+			return m, nil
 		case "enter", " ":
 			_, ok := m.selected[m.cursor]
 			if ok {
@@ -173,7 +175,25 @@ func (m model) View() string {
 }
 
 func (m model) rateEntry(rate string) error {
-	fmt.Println(rate)
+	var rateStr string
+	switch rate {
+	case "1":
+		rateStr = "not_opened"
+	case "2":
+		rateStr = "not_finished"
+	case "3":
+		rateStr = "finished"
+	default:
+		return fmt.Errorf("unknown rating")
+	}
+	entry := m.entries[m.cursor]
+	if err := m.postgres.StoreEntry(entry, rateStr); err != nil {
+		return fmt.Errorf("could not store entry: %v", err)
+	}
+	if err := m.miniflux.MarkRead(entry.ID); err != nil {
+		return fmt.Errorf("could not mark entry read: %v", err)
+	}
+
 	return nil
 }
 

@@ -106,3 +106,11 @@ func (mf *Miniflux) Unread() ([]Entry, error) {
 
 	return entries, nil
 }
+
+func (mf *Miniflux) MarkRead(id ...int64) error {
+	if err := mf.client.UpdateEntries(id, "read"); err != nil {
+		return fmt.Errorf("could not mark entries read: %v", err)
+	}
+
+	return nil
+}
