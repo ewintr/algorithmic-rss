@@ -5,59 +5,120 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	miniflux "miniflux.app/v2/client"
 )
 
-type MFResult struct {
-	Entries []*miniflux.Entry
+type CategoriesResult struct {
+	Categories []Category
+	Error      error
+}
+
+type FeedsResult struct {
+	Feeds []Feed
+	Error error
+}
+
+type EntriesResult struct {
+	Entries []Entry
 	Error   error
 }
 
-func (m model) refreshFeed() tea.Cmd {
+func (m model) fetchCategories() tea.Cmd {
 	return func() tea.Msg {
-		result, err := m.client.Entries(&miniflux.Filter{
-			Statuses:  []string{"unread"},
-			Order:     "published_at",
-			Limit:     5,
-			Direction: "desc",
-		})
-
-		return MFResult{
-			Entries: result.Entries,
-			Error:   err,
+		cats, err := m.postgres.Categories()
+		return CategoriesResult{
+			Categories: cats,
+			Error:      err,
 		}
 	}
 }
 
+func (m model) fetchFeeds() tea.Cmd {
+	return func() tea.Msg {
+		feeds, err := m.postgres.Feeds()
+		return FeedsResult{
+			Feeds: feeds,
+			Error: err,
+		}
+	}
+}
+
+func (m model) fetchUnread() tea.Cmd {
+	return func() tea.Msg {
+		m.status = "Loading..."
+		entries, err := m.miniflux.Unread()
+		return EntriesResult{Entries: entries, Error: err}
+	}
+}
+
 type model struct {
-	client     *miniflux.Client
+	miniflux   *Miniflux
+	postgres   *Postgres
 	lastUpdate time.Time
-	entries    []string
+	categories map[int64]Category
+	feeds      map[int64]Feed
+	entries    []Entry
+	status     string
 	cursor     int
 	selected   map[int]struct{}
 	quitting   bool
 }
 
-func InitialModel(client *miniflux.Client) model {
+func InitialModel(mf *Miniflux, pq *Postgres) model {
 	return model{
-		client:   client,
-		entries:  make([]string, 0),
-		selected: make(map[int]struct{}),
+		miniflux:   mf,
+		postgres:   pq,
+		categories: make(map[int64]Category, 0),
+		feeds:      make(map[int64]Feed, 0),
+		entries:    make([]Entry, 0),
+		selected:   make(map[int]struct{}),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return m.refreshFeed()
+	return tea.Batch(
+		m.fetchCategories(),
+		m.fetchFeeds(),
+		m.fetchUnread(),
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case MFResult:
-		entries := make([]string, 0)
-		for _, entry := range msg.Entries {
-			entries = append(entries, entry.Title)
+	case CategoriesResult:
+		if msg.Error != nil {
+			m.status = fmt.Sprintf("Error: %s", msg.Error)
+			return m, nil
+		}
+		cats := make(map[int64]Category)
+		for _, cat := range msg.Categories {
+			cats[cat.ID] = cat
+		}
+		m.categories = cats
+	case FeedsResult:
+		if msg.Error != nil {
+			m.status = fmt.Sprintf("Error: %s", msg.Error)
+			return m, nil
+		}
+		feeds := make(map[int64]Feed)
+		for _, f := range msg.Feeds {
+			feeds[f.ID] = f
+		}
+		m.feeds = feeds
+
+	case EntriesResult:
+		if msg.Error != nil {
+			m.status = fmt.Sprintf("Error: %s", msg.Error)
+			return m, nil
+		}
+		entries := make([]Entry, 0)
+		for _, e := range msg.Entries {
+			if m.isVideo(e.FeedID) {
+				continue
+			}
+			entries = append(entries, e)
 		}
 		m.entries = entries
+		// m.status = fmt.Sprintf("Fetched %d entries.", len(m.entries))
 		m.lastUpdate = time.Now()
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -65,7 +126,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "r":
-			return m, m.refreshFeed()
+			return m, m.fetchUnread()
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -73,6 +134,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if m.cursor < len(m.entries)-1 {
 				m.cursor++
+			}
+		case "1", "2", "3":
+			if err := m.rateEntry(msg.String()); err != nil {
+				m.status = fmt.Sprintf("Error: %s", err)
 			}
 		case "enter", " ":
 			_, ok := m.selected[m.cursor]
@@ -88,15 +153,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := fmt.Sprintf("\n Entries. (Last updated on %s)\n\n", m.lastUpdate.Format("15:04:05"))
-	for i, choice := range m.entries {
+	s := fmt.Sprintf("\n Entries. (Last updated: %s)\n\n", m.lastUpdate.Format("15:04:05"))
+	for i := 0; i < len(m.entries) && i < 5; i++ {
 		cursor := " "
 		if m.cursor == i {
 			cursor = ">"
 		}
-		s += fmt.Sprintf("%s %s\n", cursor, choice)
+		s += fmt.Sprintf("%s %s\n", cursor, m.entries[i].Title)
 	}
-	s += "\nPress r to refresh, q to quit.\n"
+	s += fmt.Sprintf("Status: %s", m.status)
+	if len(m.entries) > 0 {
+		// selected := m.entries[m.cursor]
+		// s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", selected.FeedTitle, selected.Title, selected.URL)
+	}
+	s += "\nRate: 1: Not opened, 2: Not finished 3: Finished"
+	s += "\n\nPress r to refresh, q to quit.\n"
 
 	return s
+}
+
+func (m model) rateEntry(rate string) error {
+	fmt.Println(rate)
+	return nil
+}
+
+func (m model) isVideo(feedID int64) bool {
+	f, _ := m.feeds[feedID]
+	c, _ := m.categories[f.CategoryID]
+	if c.ID == CAT_VIDEO || c.ID == CAT_MUSIC {
+		return true
+	}
+	return false
 }
