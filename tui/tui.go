@@ -155,7 +155,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := fmt.Sprintf("\n Entries. (Last updated: %s)\n\n", m.lastUpdate.Format("15:04:05"))
+	if len(m.entries) > 0 {
+		selected := m.entries[m.cursor]
+		m.status = fmt.Sprintf("feed: %d, cat: %d", selected.FeedID, m.feeds[selected.FeedID].CategoryID)
+	}
+	s := fmt.Sprintf("\n Status: %s\n  Last updated: %s)\n\n", m.status, m.lastUpdate.Format("15:04:05"))
 	for i := 0; i < len(m.entries) && i < 5; i++ {
 		cursor := " "
 		if m.cursor == i {
@@ -163,10 +167,10 @@ func (m model) View() string {
 		}
 		s += fmt.Sprintf("%s %s\n", cursor, m.entries[i].Title)
 	}
-	s += fmt.Sprintf("Status: %s", m.status)
 	if len(m.entries) > 0 {
-		// selected := m.entries[m.cursor]
-		// s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", selected.FeedTitle, selected.Title, selected.URL)
+		selected := m.entries[m.cursor]
+		s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", m.feeds[selected.FeedID].Title, selected.Title, selected.URL)
+		// s += fmt.Sprintf("\n\n%s\n\n", selected.Content)
 	}
 	s += "\nRate: 1: Not opened, 2: Not finished 3: Finished"
 	s += "\n\nPress r to refresh, q to quit.\n"
@@ -199,8 +203,8 @@ func (m model) rateEntry(rate string) error {
 
 func (m model) isVideo(feedID int64) bool {
 	f, _ := m.feeds[feedID]
-	c, _ := m.categories[f.CategoryID]
-	if c.ID == CAT_VIDEO || c.ID == CAT_MUSIC {
+	catID := f.CategoryID
+	if catID == CAT_VIDEO || catID == CAT_MUSIC {
 		return true
 	}
 	return false
