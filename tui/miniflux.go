@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	miniflux "miniflux.app/v2/client"
 )
 
@@ -94,12 +95,16 @@ func (mf *Miniflux) Unread() ([]Entry, error) {
 		if e.Feed == nil {
 			return nil, fmt.Errorf("could not fetch unread entries, entry without feed: %d", e.ID)
 		}
+		mdContent := ConvertHTMLToMarkdown(e.Content)
+		if len(mdContent) > 200 {
+			mdContent = mdContent[:500]
+		}
 		mfe := Entry{
 			ID:      e.ID,
 			FeedID:  e.Feed.ID,
 			Title:   e.Title,
 			URL:     e.URL,
-			Content: e.Content,
+			Content: mdContent,
 		}
 		entries = append(entries, mfe)
 	}
@@ -113,4 +118,13 @@ func (mf *Miniflux) MarkRead(id ...int64) error {
 	}
 
 	return nil
+}
+
+func ConvertHTMLToMarkdown(html string) string {
+	markdown, err := htmltomarkdown.ConvertString(html)
+	if err != nil {
+		markdown = fmt.Sprintf("Error: could not convert html: %v", err)
+	}
+
+	return markdown
 }

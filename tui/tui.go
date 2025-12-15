@@ -170,7 +170,7 @@ func (m model) View() string {
 	if len(m.entries) > 0 {
 		selected := m.entries[m.cursor]
 		s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", m.feeds[selected.FeedID].Title, selected.Title, selected.URL)
-		// s += fmt.Sprintf("\n\n%s\n\n", selected.Content)
+		s += fmt.Sprintf("\n\n%s\n\n", selected.Content)
 	}
 	s += "\nRate: 1: Not opened, 2: Not finished 3: Finished"
 	s += "\n\nPress r to refresh, q to quit.\n"
