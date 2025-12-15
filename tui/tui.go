@@ -51,6 +51,32 @@ func (m model) fetchUnread() tea.Cmd {
 	}
 }
 
+type MarkReadResult error
+
+func (m model) rateEntry(entry Entry, rate string) tea.Cmd {
+	return func() tea.Msg {
+		var rateStr string
+		switch rate {
+		case "1":
+			rateStr = "not_opened"
+		case "2":
+			rateStr = "not_finished"
+		case "3":
+			rateStr = "finished"
+		default:
+			return MarkReadResult(fmt.Errorf("unknown rating"))
+		}
+		if err := m.postgres.StoreEntry(entry, rateStr); err != nil {
+			return MarkReadResult(fmt.Errorf("could not store entry: %v", err))
+		}
+		if err := m.miniflux.MarkRead(entry.ID); err != nil {
+			return MarkReadResult(fmt.Errorf("could not mark entry read: %v", err))
+		}
+
+		return MarkReadResult(nil)
+	}
+}
+
 type model struct {
 	miniflux   *Miniflux
 	postgres   *Postgres
@@ -121,6 +147,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries = entries
 		// m.status = fmt.Sprintf("Fetched %d entries.", len(m.entries))
 		m.lastUpdate = time.Now()
+	case MarkReadResult:
+		if msg != nil {
+			m.status = fmt.Sprintf("Error: %s", error(msg))
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -137,11 +167,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "1", "2", "3":
-			if err := m.rateEntry(msg.String()); err != nil {
-				m.status = fmt.Sprintf("Error: %s", err)
-			}
+			entry := m.entries[m.cursor]
 			m.entries = append(m.entries[:m.cursor], m.entries[m.cursor+1:]...)
-			return m, nil
+			return m, m.rateEntry(entry, msg.String())
 		case "enter", " ":
 			_, ok := m.selected[m.cursor]
 			if ok {
@@ -156,10 +184,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if len(m.entries) > 0 {
-		selected := m.entries[m.cursor]
-		m.status = fmt.Sprintf("feed: %d, cat: %d", selected.FeedID, m.feeds[selected.FeedID].CategoryID)
-	}
+	s := m.listView()
+	s += m.entryView()
+
+	return s
+}
+
+func (m model) listView() string {
 	s := fmt.Sprintf("\n Status: %s\n  Last updated: %s)\n\n", m.status, m.lastUpdate.Format("15:04:05"))
 	for i := 0; i < len(m.entries) && i < 5; i++ {
 		cursor := " "
@@ -168,6 +199,12 @@ func (m model) View() string {
 		}
 		s += fmt.Sprintf("%s %s\n", cursor, m.entries[i].Title)
 	}
+
+	return s
+}
+
+func (m model) entryView() string {
+	var s string
 	if len(m.entries) > 0 {
 		selected := m.entries[m.cursor]
 		s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", m.feeds[selected.FeedID].Title, selected.Title, selected.URL)
@@ -181,29 +218,6 @@ func (m model) View() string {
 	s += "\n\nPress r to refresh, q to quit.\n"
 
 	return s
-}
-
-func (m model) rateEntry(rate string) error {
-	var rateStr string
-	switch rate {
-	case "1":
-		rateStr = "not_opened"
-	case "2":
-		rateStr = "not_finished"
-	case "3":
-		rateStr = "finished"
-	default:
-		return fmt.Errorf("unknown rating")
-	}
-	entry := m.entries[m.cursor]
-	if err := m.postgres.StoreEntry(entry, rateStr); err != nil {
-		return fmt.Errorf("could not store entry: %v", err)
-	}
-	if err := m.miniflux.MarkRead(entry.ID); err != nil {
-		return fmt.Errorf("could not mark entry read: %v", err)
-	}
-
-	return nil
 }
 
 func (m model) isVideo(feedID int64) bool {
