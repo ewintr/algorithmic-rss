@@ -96,7 +96,7 @@ func (mf *Miniflux) Unread() ([]Entry, error) {
 			return nil, fmt.Errorf("could not fetch unread entries, entry without feed: %d", e.ID)
 		}
 		mdContent := ConvertHTMLToMarkdown(e.Content)
-		if len(mdContent) > 200 {
+		if len(mdContent) > 500 {
 			mdContent = mdContent[:500]
 		}
 		mfe := Entry{

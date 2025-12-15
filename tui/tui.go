@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 )
 
 type CategoriesResult struct {
@@ -170,7 +171,11 @@ func (m model) View() string {
 	if len(m.entries) > 0 {
 		selected := m.entries[m.cursor]
 		s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", m.feeds[selected.FeedID].Title, selected.Title, selected.URL)
-		s += fmt.Sprintf("\n\n%s\n\n", selected.Content)
+		content, err := glamour.Render(selected.Content, "dark")
+		if err != nil {
+			content = fmt.Sprintf("could not render body: %v", content)
+		}
+		s += fmt.Sprintf("\n\n%s\n\n", content)
 	}
 	s += "\nRate: 1: Not opened, 2: Not finished 3: Finished"
 	s += "\n\nPress r to refresh, q to quit.\n"
