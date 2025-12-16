@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type CategoriesResult struct {
@@ -87,6 +88,8 @@ type model struct {
 	status     string
 	cursor     int
 	selected   map[int]struct{}
+	width      int
+	height     int
 	quitting   bool
 }
 
@@ -111,6 +114,9 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case CategoriesResult:
 		if msg.Error != nil {
 			m.status = fmt.Sprintf("Error: %s", msg.Error)
@@ -163,7 +169,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "down", "j":
-			if m.cursor < len(m.entries)-1 {
+			if m.cursor < 4 && m.cursor < len(m.entries)-1 {
 				m.cursor++
 			}
 		case "1", "2", "3":
@@ -184,14 +190,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := m.listView()
-	s += m.entryView()
+	if m.width == 0 {
+		return "loading..."
+	}
+	list := lipgloss.NewStyle().
+		Width(m.width).
+		Height(9).
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		Padding(1, 2).
+		Render(m.listView())
 
-	return s
+	help := lipgloss.NewStyle().
+		Width(m.width).
+		Height(2).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		Padding(1, 2).
+		Render(m.helpView())
+
+	entry := lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.height-lipgloss.Height(list)-lipgloss.Height(help)).
+		MaxHeight(m.height-lipgloss.Height(list)-lipgloss.Height(help)).
+		Padding(1, 2).
+		Render(m.entryView())
+
+	return lipgloss.JoinVertical(lipgloss.Top, list, entry, help)
 }
 
 func (m model) listView() string {
-	s := fmt.Sprintf("\n Status: %s\n  Last updated: %s)\n\n", m.status, m.lastUpdate.Format("15:04:05"))
+	s := fmt.Sprintf("Total unread: %d\n", len(m.entries))
+	if m.status != "" {
+		s += fmt.Sprintf("Status: %s\n", m.status)
+	}
+	s += "\n"
 	for i := 0; i < len(m.entries) && i < 5; i++ {
 		cursor := " "
 		if m.cursor == i {
@@ -207,15 +238,22 @@ func (m model) entryView() string {
 	var s string
 	if len(m.entries) > 0 {
 		selected := m.entries[m.cursor]
-		s += fmt.Sprintf("\n\n%s\n%s\n%s\n\n", m.feeds[selected.FeedID].Title, selected.Title, selected.URL)
+		s += fmt.Sprintf("Feed: %s\n", m.feeds[selected.FeedID].Title)
+		s += fmt.Sprintf("Title: %s\n", selected.Title)
+		s += fmt.Sprintf("URL: %s\n\n", selected.URL)
 		content, err := glamour.Render(selected.Content, "dark")
 		if err != nil {
 			content = fmt.Sprintf("could not render body: %v", content)
 		}
-		s += fmt.Sprintf("\n\n%s\n\n", content)
+		s += fmt.Sprintf("\n%s\n", content)
 	}
-	s += "\nRate: 1: Not opened, 2: Not finished 3: Finished"
-	s += "\n\nPress r to refresh, q to quit.\n"
+
+	return s
+}
+
+func (m model) helpView() string {
+	s := "Rate: 1: Not opened, 2: Not finished 3: Finished\n\n"
+	s += "Press r to refresh, q to quit.\n"
 
 	return s
 }

@@ -12,7 +12,8 @@ const (
 	CAT_COMPANY    = int64(4)
 	CAT_AGGREGATOR = int64(6)
 	CAT_MUSIC      = int64(8)
-	CAT_VIDEO      = int64(7)
+	CAT_VIDEO      = int64(2)
+	CAT_PROJECT    = int64(5)
 )
 
 type Category struct {
@@ -96,9 +97,9 @@ func (mf *Miniflux) Unread() ([]Entry, error) {
 			return nil, fmt.Errorf("could not fetch unread entries, entry without feed: %d", e.ID)
 		}
 		mdContent := ConvertHTMLToMarkdown(e.Content)
-		if len(mdContent) > 500 {
-			mdContent = mdContent[:500]
-		}
+		// if len(mdContent) > 500 {
+		// 	mdContent = mdContent[:500]
+		// }
 		mfe := Entry{
 			ID:      e.ID,
 			FeedID:  e.Feed.ID,
