@@ -1,5 +1,10 @@
 
-deploy:
+tui-deploy:
+	go build -o rss-tui ./tui/...
+	scp rss-tui server:dist
+	rm rss-tui
+
+service-deploy:
 	go build -o algorithmic-rss ./service/...
 	scp algorithmic-rss server:
 	ssh server sudo systemctl stop algorithmic-rss.service
