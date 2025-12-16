@@ -5,25 +5,30 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/BurntSushi/toml"
 	tea "github.com/charmbracelet/bubbletea"
+)
+
+var (
+	configPath = flag.String("config", "/home/erik/.config/algorithmicrss/tui.toml", "path to config file")
 )
 
 func main() {
 	flag.Parse()
 
-	conf, err := lookupEnv()
+	conf, err := loadConf(*configPath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	mf := NewMiniflux(conf["MINIFLUX_HOSTNAME"], conf["MINIFLUX_API_KEY"])
+	mf := NewMiniflux(conf["miniflux_hostname"], conf["miniflux_api_key"])
 	pq, err := NewPostgres(
-		conf["POSTGRES_HOSTNAME"],
-		conf["POSTGRES_PORT"],
-		conf["POSTGRES_DB_NAME"],
-		conf["POSTGRES_USER"],
-		conf["POSTGRES_PASSWORD"],
+		conf["postgres_hostname"],
+		conf["postgres_port"],
+		conf["postgres_db_name"],
+		conf["postgres_user"],
+		conf["postgres_password"],
 	)
 	if err != nil {
 		fmt.Printf("could not open postgres db: %s", err.Error())
@@ -41,21 +46,17 @@ func main() {
 	}
 }
 
-func lookupEnv() (map[string]string, error) {
-	res := make(map[string]string)
-	for _, key := range []string{
-		"MINIFLUX_HOSTNAME", "MINIFLUX_API_KEY",
-		"POSTGRES_HOSTNAME", "POSTGRES_PORT", "POSTGRES_DB_NAME",
-		"POSTGRES_USER", "POSTGRES_PASSWORD",
-	} {
-		val, ok := os.LookupEnv(key)
-		if !ok {
-			return nil, fmt.Errorf("%s is not set", key)
-		}
-		res[key] = val
+func loadConf(path string) (map[string]string, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, err
 	}
 
-	return res, nil
+	var config map[string]string
+	if _, err := toml.DecodeFile(path, &config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }
 
 func updatePGCategoriesAndFeeds(mf *Miniflux, pq *Postgres) error {
