@@ -82,12 +82,13 @@ func (mf *Miniflux) Feeds() ([]Feed, error) {
 	return feeds, nil
 }
 
-func (mf *Miniflux) Unread() ([]Entry, error) {
+func (mf *Miniflux) Unread(categoryID int64) ([]Entry, error) {
 	entries := make([]Entry, 0)
 	result, err := mf.client.Entries(&miniflux.Filter{
-		Statuses:  []string{"unread"},
-		Order:     "published_at",
-		Direction: "asc",
+		Statuses:   []string{"unread"},
+		CategoryID: categoryID,
+		Order:      "published_at",
+		Direction:  "asc",
 	})
 	if err != nil {
 		return nil, err

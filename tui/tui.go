@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,16 +21,34 @@ type FeedsResult struct {
 }
 
 type EntriesResult struct {
-	Entries []Entry
-	Error   error
+	CategoryID int64
+	Entries    []Entry
+	Error      error
 }
 
 func (m model) fetchCategories() tea.Cmd {
 	return func() tea.Msg {
 		cats, err := m.postgres.Categories()
+		if err != nil {
+			return CategoriesResult{
+				Categories: make([]Category, 0),
+				Error:      err,
+			}
+		}
+		existing := make([]int64, 0, len(cats))
+		for _, c := range cats {
+			existing = append(existing, c.ID)
+		}
+		for _, id := range []int64{CAT_PERSONAL, CAT_AGGREGATOR} {
+			if !slices.Contains(existing, id) {
+				return CategoriesResult{
+					Categories: make([]Category, 0),
+					Error:      fmt.Errorf("category %d disappeared", id),
+				}
+			}
+		}
 		return CategoriesResult{
 			Categories: cats,
-			Error:      err,
 		}
 	}
 }
@@ -44,11 +63,14 @@ func (m model) fetchFeeds() tea.Cmd {
 	}
 }
 
-func (m model) fetchUnread() tea.Cmd {
+func (m model) fetchUnread(categoryID int64) tea.Cmd {
 	return func() tea.Msg {
-		m.status = "Loading..."
-		entries, err := m.miniflux.Unread()
-		return EntriesResult{Entries: entries, Error: err}
+		entries, err := m.miniflux.Unread(categoryID)
+		return EntriesResult{
+			CategoryID: categoryID,
+			Entries:    entries,
+			Error:      err,
+		}
 	}
 }
 
@@ -81,18 +103,18 @@ func (m model) rateEntry(entry Entry, rate string) tea.Cmd {
 }
 
 type model struct {
-	miniflux   *Miniflux
-	postgres   *Postgres
-	lastUpdate time.Time
-	categories map[int64]Category
-	feeds      map[int64]Feed
-	entries    []Entry
-	status     string
-	cursor     int
-	selected   map[int]struct{}
-	width      int
-	height     int
-	quitting   bool
+	miniflux        *Miniflux
+	postgres        *Postgres
+	lastUpdate      time.Time
+	categories      map[int64]Category
+	feeds           map[int64]Feed
+	entries         map[int64][]Entry
+	currentCategory int64
+	status          string
+	cursor          int
+	width           int
+	height          int
+	quitting        bool
 }
 
 func InitialModel(mf *Miniflux, pq *Postgres) model {
@@ -101,8 +123,11 @@ func InitialModel(mf *Miniflux, pq *Postgres) model {
 		postgres:   pq,
 		categories: make(map[int64]Category, 0),
 		feeds:      make(map[int64]Feed, 0),
-		entries:    make([]Entry, 0),
-		selected:   make(map[int]struct{}),
+		entries: map[int64][]Entry{
+			CAT_AGGREGATOR: make([]Entry, 0),
+			CAT_PERSONAL:   make([]Entry, 0),
+		},
+		currentCategory: CAT_AGGREGATOR,
 	}
 }
 
@@ -110,7 +135,8 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		m.fetchCategories(),
 		m.fetchFeeds(),
-		m.fetchUnread(),
+		m.fetchUnread(CAT_AGGREGATOR),
+		m.fetchUnread(CAT_PERSONAL),
 	)
 }
 
@@ -152,7 +178,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			entries = append(entries, e)
 		}
-		m.entries = entries
+		m.entries[msg.CategoryID] = entries
 		// m.status = fmt.Sprintf("Fetched %d entries.", len(m.entries))
 		m.lastUpdate = time.Now()
 	case MarkReadResult:
@@ -165,26 +191,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "r":
-			return m, m.fetchUnread()
-		case "up", "k":
+			return m, m.fetchUnread(m.currentCategory)
+		case "left", "right":
+			if m.currentCategory == CAT_PERSONAL {
+				m.currentCategory = CAT_AGGREGATOR
+				return m, nil
+			}
+			m.currentCategory = CAT_PERSONAL
+			return m, nil
+		case "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "j":
-			if m.cursor < 4 && m.cursor < len(m.entries)-1 {
+		case "down":
+			if m.cursor < 4 && m.cursor < len(m.entries[m.currentCategory])-1 {
 				m.cursor++
 			}
 		case "1", "2", "3", "4":
-			entry := m.entries[m.cursor]
-			m.entries = append(m.entries[:m.cursor], m.entries[m.cursor+1:]...)
+			entry := m.entries[m.currentCategory][m.cursor]
+			m.entries[m.currentCategory] = append(m.entries[m.currentCategory][:m.cursor], m.entries[m.currentCategory][m.cursor+1:]...)
 			return m, m.rateEntry(entry, msg.String())
-		case "enter", " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
-			}
 		}
 	}
 
@@ -220,17 +246,17 @@ func (m model) View() string {
 }
 
 func (m model) listView() string {
-	s := fmt.Sprintf("Total unread: %d\n", len(m.entries))
+	s := fmt.Sprintf("Total unread aggregator: %d, personal %d\n", len(m.entries[CAT_AGGREGATOR]), len(m.entries[CAT_PERSONAL]))
 	if m.status != "" {
 		s += fmt.Sprintf("Status: %s\n", m.status)
 	}
 	s += "\n"
-	for i := 0; i < len(m.entries) && i < 5; i++ {
+	for i := 0; i < len(m.entries[m.currentCategory]) && i < 5; i++ {
 		cursor := " "
 		if m.cursor == i {
 			cursor = ">"
 		}
-		s += fmt.Sprintf("%s %s\n", cursor, m.entries[i].Title)
+		s += fmt.Sprintf("%s %s\n", cursor, m.entries[m.currentCategory][i].Title)
 	}
 
 	return s
@@ -238,8 +264,8 @@ func (m model) listView() string {
 
 func (m model) entryView() string {
 	var s string
-	if len(m.entries) > 0 {
-		selected := m.entries[m.cursor]
+	if len(m.entries[m.currentCategory]) > 0 {
+		selected := m.entries[m.currentCategory][m.cursor]
 		s += fmt.Sprintf("Feed: %s\n", m.feeds[selected.FeedID].Title)
 		s += fmt.Sprintf("Title: %s\n", selected.Title)
 		s += fmt.Sprintf("URL: %s\n\n", selected.URL)
@@ -255,7 +281,7 @@ func (m model) entryView() string {
 
 func (m model) helpView() string {
 	s := "Rate: 1: Not opened, 2: Only comments, 3: Not finished, 4: Finished\n\n"
-	s += "Press r to refresh, q to quit.\n"
+	s += "Press left or right arrows to change category, r to refresh, q to quit.\n"
 
 	return s
 }
