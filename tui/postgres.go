@@ -33,6 +33,7 @@ var migrations = []string{
   	url TEXT,
   	content TEXT
 	)`,
+	`ALTER TYPE rating ADD VALUE 'only_comments'`,
 }
 
 var (

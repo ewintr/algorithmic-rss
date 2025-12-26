@@ -61,8 +61,10 @@ func (m model) rateEntry(entry Entry, rate string) tea.Cmd {
 		case "1":
 			rateStr = "not_opened"
 		case "2":
-			rateStr = "not_finished"
+			rateStr = "only_comments"
 		case "3":
+			rateStr = "not_finished"
+		case "4":
 			rateStr = "finished"
 		default:
 			return MarkReadResult(fmt.Errorf("unknown rating"))
@@ -172,7 +174,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < 4 && m.cursor < len(m.entries)-1 {
 				m.cursor++
 			}
-		case "1", "2", "3":
+		case "1", "2", "3", "4":
 			entry := m.entries[m.cursor]
 			m.entries = append(m.entries[:m.cursor], m.entries[m.cursor+1:]...)
 			return m, m.rateEntry(entry, msg.String())
@@ -252,7 +254,7 @@ func (m model) entryView() string {
 }
 
 func (m model) helpView() string {
-	s := "Rate: 1: Not opened, 2: Not finished 3: Finished\n\n"
+	s := "Rate: 1: Not opened, 2: Only comments, 3: Not finished, 4: Finished\n\n"
 	s += "Press r to refresh, q to quit.\n"
 
 	return s
