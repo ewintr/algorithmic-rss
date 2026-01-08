@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -64,21 +65,32 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 	}
 
 	logger.Info("unread video entries found", "count", result.Total)
-	logger.Info("checking for youtube shorts")
-	ytShortIDs := make([]int64, 0)
+	logger.Info("checking for things to mark as read")
+	skipIDs := make([]int64, 0)
 	for _, entry := range result.Entries {
-		if strings.HasPrefix(entry.URL, "https://www.youtube.com/shorts") {
-			ytShortIDs = append(ytShortIDs, entry.ID)
+		link, err := url.Parse(entry.URL)
+		if err != nil {
+			logger.Error("could not parse url", "url", entry.URL)
+			continue
+		}
+		if link.Hostname() == "www.youtube.com" && strings.HasPrefix(link.Path, "/shorts") {
+			skipIDs = append(skipIDs, entry.ID)
+		}
+		if link.Hostname() == "cdn.media.ccc.de" && strings.Contains(link.Path, "-deu-") {
+			skipIDs = append(skipIDs, entry.ID)
+		}
+		if time.Since(entry.Date) < 3*24*time.Hour {
+			skipIDs = append(skipIDs, entry.ID)
 		}
 	}
-	if len(ytShortIDs) == 0 {
-		logger.Info("no shorts found")
+	if len(skipIDs) == 0 {
+		logger.Info("nothing to skip")
 		return nil
 	}
-	if err := client.UpdateEntries(ytShortIDs, "read"); err != nil {
+	if err := client.UpdateEntries(skipIDs, "read"); err != nil {
 		return fmt.Errorf("could not mark entries read: %v", err)
 	}
-	logger.Info("youtube shorts marked read", "count", len(ytShortIDs))
+	logger.Info("youtube shorts marked read", "count", len(skipIDs))
 
 	return nil
 }
