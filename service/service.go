@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	CAT_VIDEO = int64(2)
+	CAT_VIDEO            = int64(2)
+	CAT_NEWS_AGGREGATORS = int64(6)
 )
 
 func main() {
@@ -38,9 +39,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			if err := checkUnread(ctx, client, logger); err != nil {
-				logger.Error("error checking feed", "error", err)
-			}
+			checkUnread(ctx, client, logger)
 		case <-c:
 			logger.Info("stopping service")
 			goto EXIT
@@ -52,45 +51,52 @@ EXIT:
 	logger.Info("service exited")
 }
 
-func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) error {
+func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) {
 	logger.Info("checking feed...")
 
-	result, err := client.CategoryEntriesContext(ctx, CAT_VIDEO, &miniflux.Filter{Statuses: []string{"unread"}})
-	if err != nil {
-		return fmt.Errorf("could not fetch entries: %v", err)
-	}
-	if result.Total == 0 {
-		logger.Info("no unread entries found")
-		return nil
-	}
-
-	logger.Info("unread video entries found", "count", result.Total)
-	logger.Info("checking for things to mark as read")
-	skipIDs := make([]int64, 0)
-	for _, entry := range result.Entries {
-		link, err := url.Parse(entry.URL)
+	for _, category := range []int64{CAT_VIDEO, CAT_NEWS_AGGREGATORS} {
+		catLogger := logger.With("category", category)
+		result, err := client.CategoryEntriesContext(ctx, category, &miniflux.Filter{Statuses: []string{"unread"}})
 		if err != nil {
-			logger.Error("could not parse url", "url", entry.URL)
+			catLogger.Error("could not fetch entries", "error", err)
 			continue
 		}
-		if link.Hostname() == "www.youtube.com" && strings.HasPrefix(link.Path, "/shorts") {
-			skipIDs = append(skipIDs, entry.ID)
+		if result.Total == 0 {
+			catLogger.Info("no unread entries found")
+			continue
 		}
-		if link.Hostname() == "cdn.media.ccc.de" && strings.Contains(link.Path, "-deu-") {
-			skipIDs = append(skipIDs, entry.ID)
-		}
-		if time.Since(entry.Date) < 3*24*time.Hour {
-			skipIDs = append(skipIDs, entry.ID)
-		}
-	}
-	if len(skipIDs) == 0 {
-		logger.Info("nothing to skip")
-		return nil
-	}
-	if err := client.UpdateEntries(skipIDs, "read"); err != nil {
-		return fmt.Errorf("could not mark entries read: %v", err)
-	}
-	logger.Info("youtube shorts marked read", "count", len(skipIDs))
 
-	return nil
+		catLogger.Info("unread entries found", "count", result.Total)
+		catLogger.Info("checking for things to mark as read")
+		skipIDs := make([]int64, 0)
+		for _, entry := range result.Entries {
+			link, err := url.Parse(entry.URL)
+			if err != nil {
+				catLogger.Error("could not parse url", "url", entry.URL)
+				continue
+			}
+			switch category {
+			case CAT_VIDEO:
+				if link.Hostname() == "www.youtube.com" && strings.HasPrefix(link.Path, "/shorts") {
+					skipIDs = append(skipIDs, entry.ID)
+				}
+				if link.Hostname() == "cdn.media.ccc.de" && strings.Contains(link.Path, "-deu-") {
+					skipIDs = append(skipIDs, entry.ID)
+				}
+			case CAT_NEWS_AGGREGATORS:
+				if time.Since(entry.Date) < 36*time.Hour {
+					skipIDs = append(skipIDs, entry.ID)
+				}
+			}
+		}
+		if len(skipIDs) == 0 {
+			catLogger.Info("nothing to skip")
+			continue
+		}
+		if err := client.UpdateEntries(skipIDs, "read"); err != nil {
+			catLogger.Error("could not mark entries read", "error", err)
+			continue
+		}
+		catLogger.Info("entries marked read", "count", len(skipIDs))
+	}
 }
