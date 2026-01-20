@@ -84,7 +84,7 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 					skipIDs = append(skipIDs, entry.ID)
 				}
 			case CAT_NEWS_AGGREGATORS:
-				if time.Since(entry.Date) < 36*time.Hour {
+				if time.Since(entry.Date) > 36*time.Hour {
 					skipIDs = append(skipIDs, entry.ID)
 				}
 			}
