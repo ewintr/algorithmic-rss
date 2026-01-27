@@ -15,11 +15,13 @@ import (
 const (
 	CatVideo         = int64(2)
 	CatNewsAggrators = int64(6)
+	CatSmallWeb      = int64(3)
 )
 
 var (
-	TimeoutVids = 48 * time.Hour
-	TimeoutAggr = 24 * time.Hour
+	TimeoutSmallWeb = 48 * time.Hour
+	TimeoutVids     = 7 * 24 * time.Hour
+	TimeoutAggr     = 24 * time.Hour
 )
 
 func main() {
@@ -59,7 +61,7 @@ EXIT:
 func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) {
 	logger.Info("checking feed...")
 
-	for _, category := range []int64{CatVideo, CatNewsAggrators} {
+	for _, category := range []int64{CatVideo, CatNewsAggrators, CatSmallWeb} {
 		catLogger := logger.With("category", category)
 		result, err := client.CategoryEntriesContext(ctx, category, &miniflux.Filter{Statuses: []string{"unread"}})
 		if err != nil {
@@ -93,6 +95,10 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 				}
 			case CatNewsAggrators:
 				if time.Since(entry.Date) > TimeoutAggr {
+					skipIDs = append(skipIDs, entry.ID)
+				}
+			case CatSmallWeb:
+				if time.Since(entry.Date) > TimeoutSmallWeb {
 					skipIDs = append(skipIDs, entry.ID)
 				}
 			}
