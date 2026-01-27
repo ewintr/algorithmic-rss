@@ -13,8 +13,13 @@ import (
 )
 
 const (
-	CAT_VIDEO            = int64(2)
-	CAT_NEWS_AGGREGATORS = int64(6)
+	CatVideo         = int64(2)
+	CatNewsAggrators = int64(6)
+)
+
+var (
+	TimeoutVids = 48 * time.Hour
+	TimeoutAggr = 24 * time.Hour
 )
 
 func main() {
@@ -54,7 +59,7 @@ EXIT:
 func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) {
 	logger.Info("checking feed...")
 
-	for _, category := range []int64{CAT_VIDEO, CAT_NEWS_AGGREGATORS} {
+	for _, category := range []int64{CatVideo, CatNewsAggrators} {
 		catLogger := logger.With("category", category)
 		result, err := client.CategoryEntriesContext(ctx, category, &miniflux.Filter{Statuses: []string{"unread"}})
 		if err != nil {
@@ -76,15 +81,18 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 				continue
 			}
 			switch category {
-			case CAT_VIDEO:
+			case CatVideo:
 				if link.Hostname() == "www.youtube.com" && strings.HasPrefix(link.Path, "/shorts") {
 					skipIDs = append(skipIDs, entry.ID)
 				}
 				if link.Hostname() == "cdn.media.ccc.de" && strings.Contains(link.Path, "-deu-") {
 					skipIDs = append(skipIDs, entry.ID)
 				}
-			case CAT_NEWS_AGGREGATORS:
-				if time.Since(entry.Date) > 36*time.Hour {
+				if time.Since(entry.Date) > TimeoutVids {
+					skipIDs = append(skipIDs, entry.ID)
+				}
+			case CatNewsAggrators:
+				if time.Since(entry.Date) > TimeoutAggr {
 					skipIDs = append(skipIDs, entry.ID)
 				}
 			}
