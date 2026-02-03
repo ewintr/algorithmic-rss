@@ -11,3 +11,6 @@ service-deploy:
 	ssh server sudo mv algorithmic-rss /usr/local/bin/algorithmic-rss
 	ssh server sudo systemctl start algorithmic-rss.service
 	rm algorithmic-rss
+
+cli-build:
+	go build -o algorithmic-rss-cli ./cli/...
