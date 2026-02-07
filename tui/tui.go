@@ -5,24 +5,26 @@ import (
 	"slices"
 	"time"
 
+	"go-mod.ewintr.nl/algorithmic-rss/domain"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type CategoriesResult struct {
-	Categories []Category
+	Categories []domain.Category
 	Error      error
 }
 
 type FeedsResult struct {
-	Feeds []Feed
+	Feeds []domain.Feed
 	Error error
 }
 
 type EntriesResult struct {
 	CategoryID int64
-	Entries    []Entry
+	Entries    []domain.Entry
 	Error      error
 }
 
@@ -31,7 +33,7 @@ func (m model) fetchCategories() tea.Cmd {
 		cats, err := m.postgres.Categories()
 		if err != nil {
 			return CategoriesResult{
-				Categories: make([]Category, 0),
+				Categories: make([]domain.Category, 0),
 				Error:      err,
 			}
 		}
@@ -39,10 +41,10 @@ func (m model) fetchCategories() tea.Cmd {
 		for _, c := range cats {
 			existing = append(existing, c.ID)
 		}
-		for _, id := range []int64{CAT_PERSONAL, CAT_AGGREGATOR} {
+		for _, id := range []int64{domain.Personal, domain.CatNewsAggregator} {
 			if !slices.Contains(existing, id) {
 				return CategoriesResult{
-					Categories: make([]Category, 0),
+					Categories: make([]domain.Category, 0),
 					Error:      fmt.Errorf("category %d disappeared", id),
 				}
 			}
@@ -76,7 +78,7 @@ func (m model) fetchUnread(categoryID int64) tea.Cmd {
 
 type MarkReadResult error
 
-func (m model) rateEntry(entry Entry, rate string) tea.Cmd {
+func (m model) rateEntry(entry domain.Entry, rate string) tea.Cmd {
 	return func() tea.Msg {
 		var rateStr string
 		switch rate {
@@ -106,9 +108,9 @@ type model struct {
 	miniflux        *Miniflux
 	postgres        *Postgres
 	lastUpdate      time.Time
-	categories      map[int64]Category
-	feeds           map[int64]Feed
-	entries         map[int64][]Entry
+	categories      map[int64]domain.Category
+	feeds           map[int64]domain.Feed
+	entries         map[int64][]domain.Entry
 	currentCategory int64
 	status          string
 	cursor          int
@@ -121,13 +123,13 @@ func InitialModel(mf *Miniflux, pq *Postgres) model {
 	return model{
 		miniflux:   mf,
 		postgres:   pq,
-		categories: make(map[int64]Category, 0),
-		feeds:      make(map[int64]Feed, 0),
-		entries: map[int64][]Entry{
-			CAT_AGGREGATOR: make([]Entry, 0),
-			CAT_PERSONAL:   make([]Entry, 0),
+		categories: make(map[int64]domain.Category, 0),
+		feeds:      make(map[int64]domain.Feed, 0),
+		entries: map[int64][]domain.Entry{
+			domain.CatNewsAggregator: make([]domain.Entry, 0),
+			domain.Personal:          make([]domain.Entry, 0),
 		},
-		currentCategory: CAT_AGGREGATOR,
+		currentCategory: domain.Personal,
 	}
 }
 
@@ -135,8 +137,8 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		m.fetchCategories(),
 		m.fetchFeeds(),
-		m.fetchUnread(CAT_AGGREGATOR),
-		m.fetchUnread(CAT_PERSONAL),
+		m.fetchUnread(domain.CatNewsAggregator),
+		m.fetchUnread(domain.Personal),
 	)
 }
 
@@ -150,7 +152,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Error: %s", msg.Error)
 			return m, nil
 		}
-		cats := make(map[int64]Category)
+		cats := make(map[int64]domain.Category)
 		for _, cat := range msg.Categories {
 			cats[cat.ID] = cat
 		}
@@ -160,7 +162,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Error: %s", msg.Error)
 			return m, nil
 		}
-		feeds := make(map[int64]Feed)
+		feeds := make(map[int64]domain.Feed)
 		for _, f := range msg.Feeds {
 			feeds[f.ID] = f
 		}
@@ -171,7 +173,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Error: %s", msg.Error)
 			return m, nil
 		}
-		entries := make([]Entry, 0)
+		entries := make([]domain.Entry, 0)
 		for _, e := range msg.Entries {
 			if m.isVideo(e.FeedID) {
 				continue
@@ -193,11 +195,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			return m, m.fetchUnread(m.currentCategory)
 		case "left", "right":
-			if m.currentCategory == CAT_PERSONAL {
-				m.currentCategory = CAT_AGGREGATOR
+			if m.currentCategory == domain.Personal {
+				m.currentCategory = domain.CatNewsAggregator
 				return m, nil
 			}
-			m.currentCategory = CAT_PERSONAL
+			m.currentCategory = domain.Personal
 			return m, nil
 		case "up":
 			if m.cursor > 0 {
@@ -246,7 +248,7 @@ func (m model) View() string {
 }
 
 func (m model) listView() string {
-	s := fmt.Sprintf("Total unread aggregator: %d, personal %d\n", len(m.entries[CAT_AGGREGATOR]), len(m.entries[CAT_PERSONAL]))
+	s := fmt.Sprintf("Total unread aggregator: %d, personal %d\n", len(m.entries[domain.CatNewsAggregator]), len(m.entries[domain.Personal]))
 	if m.status != "" {
 		s += fmt.Sprintf("Status: %s\n", m.status)
 	}
@@ -289,7 +291,7 @@ func (m model) helpView() string {
 func (m model) isVideo(feedID int64) bool {
 	f, _ := m.feeds[feedID]
 	catID := f.CategoryID
-	if catID == CAT_VIDEO || catID == CAT_MUSIC {
+	if catID == domain.CatVideo || catID == domain.CatMusic {
 		return true
 	}
 	return false

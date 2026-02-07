@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+	"go-mod.ewintr.nl/algorithmic-rss/domain"
 )
 
 var migrations = []string{
@@ -68,7 +69,7 @@ func NewPostgres(host, port, dbname, user, password string) (*Postgres, error) {
 	return p, nil
 }
 
-func (p *Postgres) AddCategories(cats []Category) error {
+func (p *Postgres) AddCategories(cats []domain.Category) error {
 	values := make([]string, 0)
 	for _, c := range cats {
 		values = append(values, fmt.Sprintf("(%d, '%s')", c.ID, c.Title))
@@ -85,7 +86,7 @@ DO UPDATE SET title = EXCLUDED.title`, strings.Join(values, ","))
 	return nil
 }
 
-func (p *Postgres) AddFeeds(feeds []Feed) error {
+func (p *Postgres) AddFeeds(feeds []domain.Feed) error {
 	values := make([]string, 0)
 	for _, f := range feeds {
 		values = append(values, fmt.Sprintf("(%d, %d, %s, %s, %s)",
@@ -108,16 +109,16 @@ title = EXCLUDED.title`, strings.Join(values, ","))
 	return nil
 }
 
-func (p *Postgres) Categories() ([]Category, error) {
+func (p *Postgres) Categories() ([]domain.Category, error) {
 	rows, err := p.db.Query(`SELECT id, title FROM category`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make([]Category, 0)
+	result := make([]domain.Category, 0)
 	for rows.Next() {
-		var cat Category
+		var cat domain.Category
 		if err := rows.Scan(&cat.ID, &cat.Title); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 		}
@@ -127,16 +128,16 @@ func (p *Postgres) Categories() ([]Category, error) {
 	return result, nil
 }
 
-func (p *Postgres) Feeds() ([]Feed, error) {
+func (p *Postgres) Feeds() ([]domain.Feed, error) {
 	rows, err := p.db.Query(`SELECT id, category_id, site_url, feed_url, title FROM feed`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make([]Feed, 0)
+	result := make([]domain.Feed, 0)
 	for rows.Next() {
-		var feed Feed
+		var feed domain.Feed
 		if err := rows.Scan(&feed.ID, &feed.CategoryID, &feed.SiteURL, &feed.FeedURL, &feed.Title); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 		}
@@ -146,7 +147,7 @@ func (p *Postgres) Feeds() ([]Feed, error) {
 	return result, nil
 }
 
-func (p *Postgres) StoreEntry(entry Entry, rating string) error {
+func (p *Postgres) StoreEntry(entry domain.Entry, rating string) error {
 	if _, err := p.db.Exec(`INSERT INTO entry
 (id, feed_id, updated, title, rating, url, content)
 VALUES ($1, $2, NOW(), $3, $4, $5, $6)`,

@@ -9,13 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go-mod.ewintr.nl/algorithmic-rss/domain"
 	miniflux "miniflux.app/v2/client"
-)
-
-const (
-	CatVideo         = int64(2)
-	CatNewsAggrators = int64(6)
-	CatSmallWeb      = int64(3)
 )
 
 var (
@@ -61,7 +56,7 @@ EXIT:
 func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) {
 	logger.Info("checking feed...")
 
-	for _, category := range []int64{CatVideo, CatNewsAggrators, CatSmallWeb} {
+	for _, category := range []int64{domain.CatrVideo, domain.CatNewsAggregator, domain.CatSmallWeb} {
 		catLogger := logger.With("category", category)
 		result, err := client.CategoryEntriesContext(ctx, category, &miniflux.Filter{Statuses: []string{"unread"}})
 		if err != nil {
@@ -83,7 +78,7 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 				continue
 			}
 			switch category {
-			case CatVideo:
+			case domain.CatrVideo:
 				if link.Hostname() == "www.youtube.com" && strings.HasPrefix(link.Path, "/shorts") {
 					skipIDs = append(skipIDs, entry.ID)
 				}
@@ -93,11 +88,11 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 				if time.Since(entry.Date) > TimeoutVids {
 					skipIDs = append(skipIDs, entry.ID)
 				}
-			case CatNewsAggrators:
+			case domain.CatNewsAggregator:
 				if time.Since(entry.Date) > TimeoutAggr {
 					skipIDs = append(skipIDs, entry.ID)
 				}
-			case CatSmallWeb:
+			case domain.CatSmallWeb:
 				if time.Since(entry.Date) > TimeoutSmallWeb {
 					skipIDs = append(skipIDs, entry.ID)
 				}

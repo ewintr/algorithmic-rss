@@ -4,38 +4,9 @@ import (
 	"fmt"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"go-mod.ewintr.nl/algorithmic-rss/domain"
 	miniflux "miniflux.app/v2/client"
 )
-
-const (
-	CAT_PERSONAL   = int64(3)
-	CAT_COMPANY    = int64(4)
-	CAT_AGGREGATOR = int64(6)
-	CAT_MUSIC      = int64(8)
-	CAT_VIDEO      = int64(2)
-	CAT_PROJECT    = int64(5)
-)
-
-type Category struct {
-	ID    int64
-	Title string
-}
-
-type Feed struct {
-	ID         int64
-	CategoryID int64
-	FeedURL    string
-	SiteURL    string
-	Title      string
-}
-
-type Entry struct {
-	ID      int64
-	FeedID  int64
-	Title   string
-	URL     string
-	Content string
-}
 
 type Miniflux struct {
 	client *miniflux.Client
@@ -47,14 +18,14 @@ func NewMiniflux(host, apiKey string) *Miniflux {
 	}
 }
 
-func (mf *Miniflux) Categories() ([]Category, error) {
+func (mf *Miniflux) Categories() ([]domain.Category, error) {
 	mfCats, err := mf.client.Categories()
 	if err != nil {
 		return nil, err
 	}
-	cats := make([]Category, 0, len(mfCats))
+	cats := make([]domain.Category, 0, len(mfCats))
 	for _, c := range mfCats {
-		cats = append(cats, Category{
+		cats = append(cats, domain.Category{
 			ID:    c.ID,
 			Title: c.Title,
 		})
@@ -63,14 +34,14 @@ func (mf *Miniflux) Categories() ([]Category, error) {
 	return cats, nil
 }
 
-func (mf *Miniflux) Feeds() ([]Feed, error) {
+func (mf *Miniflux) Feeds() ([]domain.Feed, error) {
 	mfFeeds, err := mf.client.Feeds()
 	if err != nil {
 		return nil, err
 	}
-	feeds := make([]Feed, 0, len(mfFeeds))
+	feeds := make([]domain.Feed, 0, len(mfFeeds))
 	for _, f := range mfFeeds {
-		feeds = append(feeds, Feed{
+		feeds = append(feeds, domain.Feed{
 			ID:         f.ID,
 			CategoryID: f.Category.ID,
 			SiteURL:    f.SiteURL,
@@ -82,8 +53,8 @@ func (mf *Miniflux) Feeds() ([]Feed, error) {
 	return feeds, nil
 }
 
-func (mf *Miniflux) Unread(categoryID int64) ([]Entry, error) {
-	entries := make([]Entry, 0)
+func (mf *Miniflux) Unread(categoryID int64) ([]domain.Entry, error) {
+	entries := make([]domain.Entry, 0)
 	result, err := mf.client.Entries(&miniflux.Filter{
 		Statuses:   []string{"unread"},
 		CategoryID: categoryID,
@@ -101,7 +72,7 @@ func (mf *Miniflux) Unread(categoryID int64) ([]Entry, error) {
 		// if len(mdContent) > 500 {
 		// 	mdContent = mdContent[:500]
 		// }
-		mfe := Entry{
+		mfe := domain.Entry{
 			ID:      e.ID,
 			FeedID:  e.Feed.ID,
 			Title:   e.Title,
