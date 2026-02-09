@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go-mod.ewintr.nl/algorithmic-rss/domain"
+	"go-mod.ewintr.nl/algorithmic-rss/storage"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -106,7 +107,7 @@ func (m model) rateEntry(entry domain.Entry, rate string) tea.Cmd {
 
 type model struct {
 	miniflux        *Miniflux
-	postgres        *Postgres
+	postgres        *storage.TuiRepo
 	lastUpdate      time.Time
 	categories      map[int64]domain.Category
 	feeds           map[int64]domain.Feed
@@ -119,10 +120,10 @@ type model struct {
 	quitting        bool
 }
 
-func InitialModel(mf *Miniflux, pq *Postgres) model {
+func InitialModel(mf *Miniflux, repo *storage.TuiRepo) model {
 	return model{
 		miniflux:   mf,
-		postgres:   pq,
+		postgres:   repo,
 		categories: make(map[int64]domain.Category, 0),
 		feeds:      make(map[int64]domain.Feed, 0),
 		entries: map[int64][]domain.Entry{

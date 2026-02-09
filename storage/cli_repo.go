@@ -1,47 +1,30 @@
-package main
+package storage
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 
 	_ "github.com/lib/pq"
 )
 
-var (
-	ErrInvalidConfiguration     = errors.New("invalid configuration")
-	ErrPostgresFailure          = errors.New("postgres returned an error")
-)
-
-type Postgres struct {
+type CliRepo struct {
 	db *sql.DB
 }
 
-func NewPostgresFromConfig(config map[string]string) (*Postgres, error) {
-	connStr := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=disable",
-		config["postgres_hostname"], config["postgres_port"],
-		config["postgres_db_name"], config["postgres_user"], config["postgres_password"])
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidConfiguration, err)
-	}
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidConfiguration, err)
-	}
-
-	return &Postgres{db: db}, nil
+func NewCliRepo(db *sql.DB) *CliRepo {
+	return &CliRepo{db: db}
 }
 
-func (p *Postgres) TotalEntries() (int64, error) {
+func (r *CliRepo) TotalEntries() (int64, error) {
 	var count int64
-	if err := p.db.QueryRow("SELECT COUNT(*) FROM entry").Scan(&count); err != nil {
+	if err := r.db.QueryRow("SELECT COUNT(*) FROM entry").Scan(&count); err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 	}
 	return count, nil
 }
 
-func (p *Postgres) EntriesByCategory() (map[int64]int64, error) {
-	rows, err := p.db.Query(`
+func (r *CliRepo) EntriesByCategory() (map[int64]int64, error) {
+	rows, err := r.db.Query(`
 		SELECT feed.category_id, COUNT(*)
 		FROM entry
 		JOIN feed ON entry.feed_id = feed.id
@@ -65,8 +48,8 @@ func (p *Postgres) EntriesByCategory() (map[int64]int64, error) {
 	return result, nil
 }
 
-func (p *Postgres) RatingsByStatus() (map[string]int64, error) {
-	rows, err := p.db.Query("SELECT rating, COUNT(*) FROM entry GROUP BY rating")
+func (r *CliRepo) RatingsByStatus() (map[string]int64, error) {
+	rows, err := r.db.Query("SELECT rating, COUNT(*) FROM entry GROUP BY rating")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 	}
@@ -85,8 +68,8 @@ func (p *Postgres) RatingsByStatus() (map[string]int64, error) {
 	return result, nil
 }
 
-func (p *Postgres) CategoryRatingMatrix() (map[int64]map[string]int64, error) {
-	rows, err := p.db.Query(`
+func (r *CliRepo) CategoryRatingMatrix() (map[int64]map[string]int64, error) {
+	rows, err := r.db.Query(`
 		SELECT feed.category_id, entry.rating, COUNT(*)
 		FROM entry
 		JOIN feed ON entry.feed_id = feed.id
@@ -115,8 +98,8 @@ func (p *Postgres) CategoryRatingMatrix() (map[int64]map[string]int64, error) {
 	return result, nil
 }
 
-func (p *Postgres) AllRatings() ([]string, error) {
-	rows, err := p.db.Query("SELECT DISTINCT rating FROM entry ORDER BY rating")
+func (r *CliRepo) AllRatings() ([]string, error) {
+	rows, err := r.db.Query("SELECT DISTINCT rating FROM entry ORDER BY rating")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 	}
@@ -134,8 +117,8 @@ func (p *Postgres) AllRatings() ([]string, error) {
 	return ratings, nil
 }
 
-func (p *Postgres) CategoryNames() (map[int64]string, error) {
-	rows, err := p.db.Query("SELECT id, title FROM category")
+func (r *CliRepo) CategoryNames() (map[int64]string, error) {
+	rows, err := r.db.Query("SELECT id, title FROM category")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPostgresFailure, err)
 	}

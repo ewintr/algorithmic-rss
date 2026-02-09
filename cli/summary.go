@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"go-mod.ewintr.nl/algorithmic-rss/storage"
 )
 
 type Summary struct {
@@ -14,28 +16,28 @@ type Summary struct {
 	CategoryNames  map[int64]string
 }
 
-func GenerateSummary(pq *Postgres) Summary {
-	total, err := pq.TotalEntries()
+func GenerateSummary(repo *storage.CliRepo) Summary {
+	total, err := repo.TotalEntries()
 	if err != nil {
 		fmt.Printf("Warning: could not get total entries: %v\n", err)
 	}
-	byCategory, err := pq.EntriesByCategory()
+	byCategory, err := repo.EntriesByCategory()
 	if err != nil {
 		fmt.Printf("Warning: could not get entries by category: %v\n", err)
 	}
-	byRating, err := pq.RatingsByStatus()
+	byRating, err := repo.RatingsByStatus()
 	if err != nil {
 		fmt.Printf("Warning: could not get ratings by status: %v\n", err)
 	}
-	categoryRating, err := pq.CategoryRatingMatrix()
+	categoryRating, err := repo.CategoryRatingMatrix()
 	if err != nil {
 		fmt.Printf("Warning: could not get category rating matrix: %v\n", err)
 	}
-	allRatings, err := pq.AllRatings()
+	allRatings, err := repo.AllRatings()
 	if err != nil {
 		fmt.Printf("Warning: could not get all ratings: %v\n", err)
 	}
-	categoryNames, err := pq.CategoryNames()
+	categoryNames, err := repo.CategoryNames()
 	if err != nil {
 		fmt.Printf("Warning: could not get category names: %v\n", err)
 	}

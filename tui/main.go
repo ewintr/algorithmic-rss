@@ -7,6 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	tea "github.com/charmbracelet/bubbletea"
+	"go-mod.ewintr.nl/algorithmic-rss/storage"
 )
 
 var (
@@ -23,23 +24,28 @@ func main() {
 	}
 
 	mf := NewMiniflux(conf["miniflux_hostname"], conf["miniflux_api_key"])
-	pq, err := NewPostgres(
-		conf["postgres_hostname"],
-		conf["postgres_port"],
-		conf["postgres_db_name"],
-		conf["postgres_user"],
-		conf["postgres_password"],
-	)
+
+	pqCfg := &storage.Config{
+		PGHostname: conf["postgres_hostname"],
+		PGPort:     conf["postgres_port"],
+		PGDBName:   conf["postgres_db_name"],
+		PGUser:     conf["postgres_user"],
+		PGPassword: conf["postgres_password"],
+	}
+	pqClient, err := storage.NewClient(pqCfg)
 	if err != nil {
 		fmt.Printf("could not open postgres db: %s", err.Error())
 		os.Exit(1)
 	}
-	if err := updatePGCategoriesAndFeeds(mf, pq); err != nil {
+	defer pqClient.Close()
+
+	tuiRepo := storage.NewTuiRepo(pqClient.DB())
+	if err := updatePGCategoriesAndFeeds(mf, tuiRepo); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(InitialModel(mf, pq), tea.WithAltScreen())
+	p := tea.NewProgram(InitialModel(mf, tuiRepo), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -59,12 +65,12 @@ func loadConf(path string) (map[string]string, error) {
 	return config, nil
 }
 
-func updatePGCategoriesAndFeeds(mf *Miniflux, pq *Postgres) error {
+func updatePGCategoriesAndFeeds(mf *Miniflux, repo *storage.TuiRepo) error {
 	mfCats, err := mf.Categories()
 	if err != nil {
 		return fmt.Errorf("could not fetch miniflux categories: %v", err)
 	}
-	if err := pq.AddCategories(mfCats); err != nil {
+	if err := repo.AddCategories(mfCats); err != nil {
 		return fmt.Errorf("could not add postgres categories: %v", err)
 	}
 
@@ -72,7 +78,7 @@ func updatePGCategoriesAndFeeds(mf *Miniflux, pq *Postgres) error {
 	if err != nil {
 		return fmt.Errorf("could not fetch miniflux categories: %v", err)
 	}
-	if err := pq.AddFeeds(mfFeeds); err != nil {
+	if err := repo.AddFeeds(mfFeeds); err != nil {
 		return fmt.Errorf("could not add postgres feeds: %v", err)
 	}
 

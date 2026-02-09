@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
+	"go-mod.ewintr.nl/algorithmic-rss/storage"
 )
 
 func main() {
@@ -18,13 +19,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	pq, err := NewPostgresFromConfig(conf)
+	pqCfg := &storage.Config{
+		PGHostname: conf["postgres_hostname"],
+		PGPort:     conf["postgres_port"],
+		PGDBName:   conf["postgres_db_name"],
+		PGUser:     conf["postgres_user"],
+		PGPassword: conf["postgres_password"],
+	}
+	pqClient, err := storage.NewClient(pqCfg)
 	if err != nil {
 		fmt.Printf("could not connect to postgres: %v\n", err)
 		os.Exit(1)
 	}
+	defer pqClient.Close()
 
-	summary := GenerateSummary(pq)
+	cliRepo := storage.NewCliRepo(pqClient.DB())
+	summary := GenerateSummary(cliRepo)
 	PrintMatrix(summary)
 }
 
