@@ -112,6 +112,7 @@ type model struct {
 	categories      map[int64]domain.Category
 	feeds           map[int64]domain.Feed
 	entries         map[int64][]domain.Entry
+	categoriesList  []int64
 	currentCategory int64
 	status          string
 	cursor          int
@@ -129,8 +130,10 @@ func InitialModel(mf *Miniflux, repo *storage.TuiRepo) model {
 		entries: map[int64][]domain.Entry{
 			domain.CatNewsAggregator: make([]domain.Entry, 0),
 			domain.Personal:          make([]domain.Entry, 0),
+			domain.CatDutchNews:      make([]domain.Entry, 0),
 		},
-		currentCategory: domain.Personal,
+		categoriesList: []int64{domain.CatNewsAggregator, domain.Personal, domain.CatDutchNews},
+		currentCategory: domain.CatNewsAggregator,
 	}
 }
 
@@ -138,6 +141,7 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		m.fetchCategories(),
 		m.fetchFeeds(),
+		m.fetchUnread(domain.CatDutchNews),
 		m.fetchUnread(domain.CatNewsAggregator),
 		m.fetchUnread(domain.Personal),
 	)
@@ -196,11 +200,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			return m, m.fetchUnread(m.currentCategory)
 		case "left", "right":
-			if m.currentCategory == domain.Personal {
-				m.currentCategory = domain.CatNewsAggregator
-				return m, nil
+			// Cycle through categories
+			idx := slices.Index(m.categoriesList, m.currentCategory)
+			if msg.String() == "left" {
+				idx = (idx - 1 + len(m.categoriesList)) % len(m.categoriesList)
+			} else {
+				idx = (idx + 1) % len(m.categoriesList)
 			}
-			m.currentCategory = domain.Personal
+			m.currentCategory = m.categoriesList[idx]
+			m.cursor = 0
 			return m, nil
 		case "up":
 			if m.cursor > 0 {
@@ -249,7 +257,7 @@ func (m model) View() string {
 }
 
 func (m model) listView() string {
-	s := fmt.Sprintf("Total unread aggregator: %d, personal %d\n", len(m.entries[domain.CatNewsAggregator]), len(m.entries[domain.Personal]))
+	s := fmt.Sprintf("Total unread: aggregator %d, personal %d, dutch news %d\n", len(m.entries[domain.CatNewsAggregator]), len(m.entries[domain.Personal]), len(m.entries[domain.CatDutchNews]))
 	if m.status != "" {
 		s += fmt.Sprintf("Status: %s\n", m.status)
 	}
