@@ -1,0 +1,20 @@
+name: Test
+on:
+  push:
+
+jobs:
+  deploy-site:
+    container:
+      image: forgejo.loc:80/ewintr/ci-runner:0.1
+    runs-on: docker
+    steps:        
+      - name: Checkout code
+        run: |
+          git clone $FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY.git .
+          git checkout $FORGEJO_SHA
+
+      - name: Run go test
+        run: |
+          go test ./...
+          
+
