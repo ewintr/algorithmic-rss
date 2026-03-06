@@ -7,6 +7,5 @@ const (
 	CatCompany        = int64(4)
 	CatProject        = int64(5)
 	CatMusic          = int64(8)
-	CatDutchNews      = int64(10)
 	Personal          = int64(3)
 )

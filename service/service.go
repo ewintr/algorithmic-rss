@@ -58,7 +58,7 @@ EXIT:
 func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logger) {
 	logger.Info("checking feed...")
 
-	for _, category := range []int64{domain.CatVideo, domain.CatNewsAggregator, domain.CatSmallWeb, domain.CatDutchNews} {
+	for _, category := range []int64{domain.CatVideo, domain.CatNewsAggregator, domain.CatSmallWeb} {
 		catLogger := logger.With("category", category)
 		result, err := client.CategoryEntriesContext(ctx, category, &miniflux.Filter{Statuses: []string{"unread"}})
 		if err != nil {

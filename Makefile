@@ -1,7 +1,4 @@
 
-tui-run:
-	cd tui && go run .
-
 tui-deploy:
 	go build -o rss-tui ./tui/...
 	scp rss-tui server:dist
@@ -14,9 +11,6 @@ service-deploy:
 	ssh server sudo mv algorithmic-rss /usr/local/bin/algorithmic-rss
 	ssh server sudo systemctl start algorithmic-rss.service
 	rm algorithmic-rss
-
-cli-run:
-	cd cli && go run .
 
 cli-build:
 	go build -o algorithmic-rss-cli ./cli/...
