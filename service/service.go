@@ -16,7 +16,7 @@ import (
 
 var (
 	TimeoutSmallWeb        = 48 * time.Hour
-	TimeoutVids            = 7 * 24 * time.Hour
+	TimeoutVids            = 21 * 24 * time.Hour
 	TimeoutAggr            = 24 * time.Hour
 	KeepEntriesPerCategory = 10
 )
