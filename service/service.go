@@ -118,11 +118,19 @@ func checkUnread(ctx context.Context, client *miniflux.Client, logger *slog.Logg
 		}
 
 		// Pick ten random entries from remainingIDs to keep unread
-		keepIDs := make([]int64, 0, KeepEntriesPerCategory)
-		for i := 0; i < KeepEntriesPerCategory && len(remainingIDs) > 0; i++ {
-			idx := rand.Intn(len(remainingIDs))
-			keepIDs = append(keepIDs, remainingIDs[idx])
-			remainingIDs = append(remainingIDs[:idx], remainingIDs[idx+1:]...)
+		var keepIDs []int64
+		switch category {
+		case domain.CatVideo:
+			keepIDs = make([]int64, len(remainingIDs))
+			copy(keepIDs, remainingIDs)
+			remainingIDs = make([]int64, 0)
+		default:
+			keepIDs = make([]int64, 0, KeepEntriesPerCategory)
+			for i := 0; i < KeepEntriesPerCategory && len(remainingIDs) > 0; i++ {
+				idx := rand.Intn(len(remainingIDs))
+				keepIDs = append(keepIDs, remainingIDs[idx])
+				remainingIDs = append(remainingIDs[:idx], remainingIDs[idx+1:]...)
+			}
 		}
 
 		// Mark all rule-matching entries plus remainingIDs as read
