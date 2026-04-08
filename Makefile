@@ -3,6 +3,9 @@ tui-deploy:
 	go build -o rss-tui ./tui/...
 	scp rss-tui server:dist
 	rm rss-tui
+	GOOS=linux GOARCH=arm64 go build -o rss-tui-arm ./tui/...
+	scp rss-tui-arm server:dist
+	rm rss-tui-arm
 
 service-deploy:
 	go build -o algorithmic-rss ./service/...
